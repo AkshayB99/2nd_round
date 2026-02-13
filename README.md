@@ -31,13 +31,13 @@ This project deploys a fully-managed Amazon EKS cluster with the following chara
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                         AWS Cloud                            │
+│                         AWS Cloud                           │
 │  ┌───────────────────────────────────────────────────────┐  │
-│  │                    Existing VPC                        │  │
+│  │                    Existing VPC                       │  │
 │  │  ┌──────────────────────────────────────────────────┐ │  │
-│  │  │         Private Subnets (3 AZs)                   │ │  │
+│  │  │         Private Subnets (3 AZs)                  │ │  │
 │  │  │  ┌────────────────────────────────────────────┐  │ │  │
-│  │  │  │         EKS Control Plane                   │  │ │  │
+│  │  │  │         EKS Control Plane                  │  │ │  │
 │  │  │  └────────────────────────────────────────────┘  │ │  │
 │  │  │  ┌────────────────────────────────────────────┐  │ │  │
 │  │  │  │  Karpenter Controller Nodes (Managed)      │  │ │  │
@@ -95,7 +95,7 @@ Before running Terraform, ensure you have:
    - Properly tagged for discovery
 
 2. **Security Group**
-   - Named "OfficeIPs"
+   - Named "OfficeIPs" (or your preferred name)
    - Contains your office/admin IP ranges
 
 3. **SSH Key Pair**
@@ -119,36 +119,46 @@ Run this verification script:
 aws sts get-caller-identity
 aws configure get region
 
-# Verify VPC exists
+# Verify VPC exists (replace with your VPC name)
 aws ec2 describe-vpcs --filters "Name=tag:Name,Values=main-vpc"
 
-# Verify security group exists
+# Verify security group exists (replace with your security group name)
 aws ec2 describe-security-groups --filters "Name=group-name,Values=OfficeIPs"
 
-# Verify SSH key exists
-aws ec2 describe-key-pairs --key-names eks-node-key
+# Verify SSH key exists (replace with your key name)
+aws ec2 describe-key-pairs --key-names your-key-name
 
-# Check if S3 bucket for state exists
+# Check if S3 bucket for state exists (replace with your bucket name)
 aws s3 ls s3://your-terraform-state-bucket
 ```
 
 ## 🚀 Quick Start
 
-### Step 1: Tag Your AWS Resources
+### Step 1: Identify Your AWS Resources
+
+Before running the code, gather the following information from your AWS account:
+
+1. **VPC ID**: Find your VPC ID from the AWS Console or CLI
+2. **Subnet IDs**: Identify 3 private subnet IDs in different availability zones
+3. **Security Group**: Note the name/ID of your security group
+4. **SSH Key Name**: Note the name of your EC2 key pair
+5. **S3 Bucket**: Name of your Terraform state bucket
+
+### Step 2: Tag Your AWS Resources
 
 Your VPC and subnets must be properly tagged for Terraform to discover them.
 
 **Tag the VPC:**
 ```bash
-VPC_ID="vpc-0837f80df815d47c3"  # Your VPC ID
+# Replace with your actual VPC ID
+VPC_ID="vpc-xxxxxxxxxxxxxxxxx"
 aws ec2 create-tags --resources $VPC_ID --tags Key=Name,Value=main-vpc
 ```
 
 **Tag Private Subnets:**
 ```bash
-# Identify your private subnets (those without internet gateway routes)
-# Then tag them:
-SUBNET_IDS="subnet-046649f59dd3df024 subnet-0Oebbf495935fc5c5 subnet-0da781ddc8e76c620"
+# Replace with your actual subnet IDs (3 subnets in different AZs)
+SUBNET_IDS="subnet-xxxxx subnet-yyyyy subnet-zzzzz"
 
 for SUBNET_ID in $SUBNET_IDS; do
   aws ec2 create-tags --resources $SUBNET_ID --tags \
@@ -157,47 +167,54 @@ for SUBNET_ID in $SUBNET_IDS; do
 done
 ```
 
-### Step 2: Create Required AWS Resources
+### Step 3: Create Required AWS Resources (If Not Already Present)
 
 **Create Security Group (if not exists):**
 ```bash
+# Replace VPC_ID with your actual VPC ID
 aws ec2 create-security-group \
   --group-name OfficeIPs \
   --description "Office IP whitelist for EKS nodes" \
-  --vpc-id vpc-0837f80df815d47c3
+  --vpc-id vpc-xxxxxxxxxxxxxxxxx
 
-# Add your IP
+# Add your IP (replace with your actual IP)
 aws ec2 authorize-security-group-ingress \
   --group-name OfficeIPs \
   --protocol tcp \
   --port 22 \
-  --cidr YOUR_IP/32
+  --cidr YOUR_IP_ADDRESS/32
 ```
 
 **Create SSH Key Pair (if not exists):**
 ```bash
+# Replace with your preferred key name
 aws ec2 create-key-pair \
-  --key-name eks-node-key \
+  --key-name your-key-name \
   --query 'KeyMaterial' \
-  --output text > eks-node-key.pem
+  --output text > your-key-name.pem
 
-chmod 400 eks-node-key.pem
+chmod 400 your-key-name.pem
 ```
 
 **Create S3 Bucket for Terraform State:**
 ```bash
-BUCKET_NAME="your-terraform-state-bucket"
-aws s3 mb s3://$BUCKET_NAME
+# Replace with your preferred bucket name (must be globally unique)
+BUCKET_NAME="your-terraform-state-bucket-name"
+REGION="us-east-1"  # Replace with your region
+
+aws s3 mb s3://$BUCKET_NAME --region $REGION
+
 aws s3api put-bucket-versioning \
   --bucket $BUCKET_NAME \
   --versioning-configuration Status=Enabled
+
 aws s3api put-bucket-encryption \
   --bucket $BUCKET_NAME \
   --server-side-encryption-configuration \
   '{"Rules":[{"ApplyServerSideEncryptionByDefault":{"SSEAlgorithm":"AES256"}}]}'
 ```
 
-### Step 3: Clone and Configure
+### Step 4: Clone and Configure
 
 ```bash
 # Clone the repository
@@ -208,39 +225,53 @@ cd eks-terraform-project
 cd environments/dev
 
 # Edit terraform.tfvars with your actual values
-# Update:
-# - ssh_key_name = "your-actual-key-name"
+# Update the following variables:
+# - vpc_name = "your-vpc-name"
+# - ssh_key_name = "your-key-name"
+# - region = "your-aws-region"
+# - cluster_name = "your-cluster-name"
 # - Any other environment-specific values
 
-# Edit main.tf and update the S3 backend bucket name
+# Edit main.tf and update the S3 backend configuration
+# Update:
+# - bucket = "your-terraform-state-bucket"
+# - region = "your-aws-region"
+# - key = "path/to/your/state/file"
 ```
 
-### Step 4: Deploy
+### Step 5: Initialize and Deploy
 
 ```bash
-# Initialize Terraform
+# Initialize Terraform (downloads providers and modules)
 terraform init
 
-# Review the plan
+# Validate configuration
+terraform validate
+
+# Review the execution plan
 terraform plan
 
-# Apply the configuration (takes ~15 minutes)
+# Apply the configuration (takes ~15-20 minutes)
 terraform apply
+
+# Confirm by typing 'yes' when prompted
 
 # Note the outputs for kubectl configuration
 ```
 
-### Step 5: Access the Cluster
+### Step 6: Configure kubectl and Access the Cluster
 
 ```bash
-# Configure kubectl
-aws eks update-kubeconfig --region us-east-1 --name eks-dev-cluster
+# Update kubeconfig (replace with your region and cluster name)
+aws eks update-kubeconfig \
+  --region your-region \
+  --name your-cluster-name
 
 # Verify connection
 kubectl get nodes
-kubectl get pods -n karpenter
 
 # Check Karpenter is running
+kubectl get pods -n karpenter
 kubectl get deployment -n karpenter
 ```
 
@@ -297,6 +328,8 @@ Each environment has different configurations optimized for its purpose:
 | Memory Limit | 100Gi | 150Gi | 400Gi |
 | Instance Families | t4g, c7g, m7g | t4g, c7g, m7g | c7g, m7g, r7g |
 
+**Note**: Adjust these values in your `terraform.tfvars` file based on your requirements.
+
 ## 📝 Deployment Instructions
 
 ### Deploy Development Environment
@@ -304,17 +337,19 @@ Each environment has different configurations optimized for its purpose:
 ```bash
 cd environments/dev
 
-# Initialize
+# Initialize Terraform
 terraform init
 
-# Plan
+# Create execution plan
 terraform plan -out=tfplan
 
-# Apply
+# Apply the plan
 terraform apply tfplan
 
-# Get kubeconfig
-aws eks update-kubeconfig --region us-east-1 --name eks-dev-cluster
+# Configure kubectl (replace with your values)
+aws eks update-kubeconfig \
+  --region your-region \
+  --name eks-dev-cluster
 ```
 
 ### Deploy Pre-Production Environment
@@ -326,7 +361,10 @@ terraform init
 terraform plan -out=tfplan
 terraform apply tfplan
 
-aws eks update-kubeconfig --region us-east-1 --name eks-pre-prod-cluster
+# Configure kubectl (replace with your values)
+aws eks update-kubeconfig \
+  --region your-region \
+  --name eks-pre-prod-cluster
 ```
 
 ### Deploy Production Environment
@@ -342,7 +380,10 @@ terraform plan -detailed-exitcode
 
 terraform apply tfplan
 
-aws eks update-kubeconfig --region us-east-1 --name eks-prod-cluster
+# Configure kubectl (replace with your values)
+aws eks update-kubeconfig \
+  --region your-region \
+  --name eks-prod-cluster
 ```
 
 ## 🎯 Post-Deployment
@@ -514,9 +555,14 @@ terraform destroy
 **Solution**: Verify tags on your VPC and subnets:
 
 ```bash
-aws ec2 describe-vpcs --vpc-ids vpc-0837f80df815d47c3
-aws ec2 describe-subnets --subnet-ids subnet-xxx --query 'Subnets[*].Tags'
+# Replace with your VPC ID
+aws ec2 describe-vpcs --vpc-ids vpc-xxxxxxxxxxxxxxxxx
+
+# Replace with your subnet IDs
+aws ec2 describe-subnets --subnet-ids subnet-xxxxx --query 'Subnets[*].Tags'
 ```
+
+Ensure your VPC has a `Name` tag and subnets have a `Type=private` tag.
 
 ### Issue: Karpenter Pods Not Starting
 
@@ -527,17 +573,21 @@ kubectl describe pod -n karpenter -l app.kubernetes.io/name=karpenter
 kubectl logs -n karpenter -l app.kubernetes.io/name=karpenter
 ```
 
+Verify that the Karpenter service account has the correct IAM role annotation.
+
 ### Issue: Nodes Not Joining Cluster
 
 **Solution**: Verify security group rules and subnet tags:
 
 ```bash
-# Check security groups
+# Check NodePool configuration
 kubectl get nodepool -o yaml
 
-# Verify subnet tags include karpenter.sh/discovery
-aws ec2 describe-subnets --filters "Name=tag:karpenter.sh/discovery,Values=eks-dev-cluster"
+# Verify subnet tags (replace cluster name)
+aws ec2 describe-subnets --filters "Name=tag:karpenter.sh/discovery,Values=your-cluster-name"
 ```
+
+Ensure subnets are tagged with `karpenter.sh/discovery=your-cluster-name`.
 
 ### Issue: "Failed to acquire state lock"
 
@@ -545,9 +595,22 @@ aws ec2 describe-subnets --filters "Name=tag:karpenter.sh/discovery,Values=eks-d
 
 ```bash
 # If another operation was interrupted, force unlock
+# (Replace LOCK_ID with the actual lock ID from the error message)
 terraform force-unlock <LOCK_ID>
+```
 
-# Or use a DynamoDB table for state locking (recommended)
+For better state management, consider using a DynamoDB table for state locking.
+
+### Issue: terraform init fails
+
+**Solution**: 
+
+```bash
+# Clear Terraform cache
+rm -rf .terraform .terraform.lock.hcl
+
+# Re-initialize
+terraform init
 ```
 
 ### Getting Help
@@ -572,18 +635,21 @@ kubectl port-forward -n karpenter svc/karpenter 8080:8080
 EKS automatically sends logs to CloudWatch. View them:
 
 ```bash
-aws logs tail /aws/eks/eks-dev-cluster/cluster --follow
+# Replace with your cluster name
+aws logs tail /aws/eks/your-cluster-name/cluster --follow
 ```
 
 ## 🔒 Security Best Practices
 
 - ✅ All production clusters use private subnets only
 - ✅ No public API endpoint access in production
-- ✅ Security groups restrict access to office IPs
+- ✅ Security groups restrict access to authorized IPs
 - ✅ SSH keys required for node access
 - ✅ IAM roles for service accounts (IRSA) enabled
 - ✅ Encryption enabled for all data at rest
 - ✅ Network policies should be implemented for pod-to-pod communication
+- ✅ Regular security audits and updates
+- ✅ Least privilege IAM policies
 
 ## 📚 Additional Resources
 
@@ -599,3 +665,23 @@ This project is licensed under the MIT License.
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
+
+---
+
+## 🎯 Summary of Steps to Run the Code
+
+1. **Install Prerequisites**: AWS CLI, Terraform, kubectl, and Helm
+2. **Gather AWS Information**: VPC ID, subnet IDs, security group, SSH key name
+3. **Tag Resources**: Tag your VPC and subnets appropriately
+4. **Create S3 Bucket**: For Terraform state storage
+5. **Clone Repository**: Get the code on your local machine
+6. **Configure Variables**: Edit `terraform.tfvars` with your values
+7. **Update Backend**: Modify S3 backend configuration in `main.tf`
+8. **Initialize Terraform**: Run `terraform init`
+9. **Plan Deployment**: Run `terraform plan` to review changes
+10. **Apply Configuration**: Run `terraform apply` to create resources
+11. **Configure kubectl**: Update kubeconfig to access the cluster
+12. **Verify Deployment**: Check nodes and Karpenter status
+13. **Test Autoscaling**: Deploy test workload to verify Karpenter
+
+That's it! Your EKS cluster with Karpenter should be up and running.
