@@ -69,7 +69,4 @@ output "karpenter_node_role_arn" {
   value       = module.eks.eks_managed_node_groups["karpenter"].iam_role_arn
 }
 
-output "karpenter_node_instance_profile_name" {
-  description = "Name of the instance profile for Karpenter-managed nodes"
-  value       = module.eks.eks_managed_node_groups["karpenter"].iam_instance_profile_name
-}
+

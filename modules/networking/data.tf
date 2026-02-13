@@ -1,9 +1,8 @@
 # Data source to fetch existing VPC by tags
 data "aws_vpc" "main" {
-  tags = {
-    Name = var.vpc_name_tag
-  }
+  default = true
 }
+
 
 # Data source to fetch private subnets by tags
 data "aws_subnets" "private" {

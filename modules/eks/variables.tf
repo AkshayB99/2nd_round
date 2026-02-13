@@ -27,6 +27,7 @@ variable "office_security_group_id" {
 variable "ssh_key_name" {
   description = "Name of the SSH key pair for node access"
   type        = string
+  
 }
 
 variable "enable_public_access" {
